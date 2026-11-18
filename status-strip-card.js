@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -47,9 +47,11 @@ function duration(minutes) {
 }
 
 // A `show` test: { entity, state | not | above | below }. All given keys must pass.
+// A list means all of its tests; { any: [...] } means at least one.
 function passes(hass, test) {
   if (!test) return true;
   if (Array.isArray(test)) return test.every((t) => passes(hass, t));
+  if (test.any) return test.any.some((t) => passes(hass, t));
   const st = hass.states[test.entity];
   if (!st) return false;
   const s = st.state;

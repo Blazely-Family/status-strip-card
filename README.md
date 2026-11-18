@@ -62,7 +62,7 @@ strip: status_strip    # optional: name of the shared block
 
 | Key | Meaning |
 | --- | --- |
-| `show` | `{ entity, state, not, above, below }`, or a list of them (all must pass). With only `entity`, shows when the state is not off/0/unknown. |
+| `show` | `{ entity, state, not, above, below }`, or a list of them (all must pass), or `{ any: [...] }` (one must pass). With only `entity`, shows when the state is not off/0/unknown. |
 | `icon`, `label` | Lead chip icon and optional text. |
 | `colour` | Lead chip colour: `yellow`, `green`, `blue`, `grey`, `quiet` (default). |
 | `icon_colour`, `glow` | Icon colour on a quiet chip; `glow: true` adds a soft glow. |
