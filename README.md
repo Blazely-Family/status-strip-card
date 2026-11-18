@@ -1,0 +1,74 @@
+# Status Strip Card
+
+A row of status pills for Home Assistant wall panels: informative pills on the
+left, a weather warning bar filling the middle, actionable alerts on the right.
+
+The card holds no house logic. Each pill shows or hides on one entity's state
+and displays entity states, countdowns or elapsed times. The rules behind those
+entities (tariff periods, what counts as "open", room averages) belong in Home
+Assistant helpers, where they can be changed without touching code.
+
+## Install
+
+HACS (or the Marketplace) → custom repositories → add this repository's URL as a
+**Dashboard** repository, then download it. HACS registers the dashboard
+resource.
+
+## Config
+
+Write the pill list once at the top level of the dashboard (raw configuration
+editor) under `status_strip`; every card on that dashboard reads it. Anything
+set on a card overrides the shared block.
+
+```yaml
+status_strip:
+  # Room pill: logged-in user -> room key. A card's own `room:` is the fallback.
+  rooms:
+    Example Panel: living_room
+  room_names:
+    living_room: Living Room
+  room_temperature: sensor.{room}_average_temperature   # default
+  room_humidity: sensor.{room}_average_humidity         # default
+  weather:
+    show: { entity: binary_sensor.example_warning_active, state: "on" }
+    text: sensor.example_warning_text
+  left:
+    - show: { entity: binary_sensor.example_peak, state: "off" }
+      icon: mdi:flash
+      colour: green
+      tap: false
+      chips:
+        - { entity: sensor.example_peak_next_change, value: countdown, icon: mdi:timer-sand }
+  right:
+    - show: { entity: sensor.example_offline_count, above: 0 }
+      icon: mdi:access-point-network-off
+      label: Offline
+      colour: yellow
+      tap: group.example_offline
+      chips:
+        - { entity: sensor.example_offline_count }
+```
+
+Each card:
+
+```yaml
+type: custom:status-strip-card
+room: living_room      # optional
+only: weather          # optional: just the weather bar
+strip: status_strip    # optional: name of the shared block
+```
+
+### Pill keys
+
+| Key | Meaning |
+| --- | --- |
+| `show` | `{ entity, state, not, above, below }`, or a list of them (all must pass). With only `entity`, shows when the state is not off/0/unknown. |
+| `icon`, `label` | Lead chip icon and optional text. |
+| `colour` | Lead chip colour: `yellow`, `green`, `blue`, `grey`, `quiet` (default). |
+| `icon_colour`, `glow` | Icon colour on a quiet chip; `glow: true` adds a soft glow. |
+| `chips` | Value chips: `{ entity, attribute?, value: state \| countdown \| elapsed, icon?, colour?, unit?, round?, hide_zero? }`. `countdown`/`elapsed` read a timestamp. |
+| `tap` | Entity to open in more-info, a `/path` to navigate to, or `false`. Defaults to the `show` entity. |
+
+Styling uses HA theme variables; override with `--status-strip-pill-background`,
+`--status-strip-pill-border`, `--status-strip-pill-radius`,
+`--status-strip-pill-shadow` and `--status-strip-pill-backdrop`.
