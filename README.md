@@ -59,6 +59,21 @@ strip: status_strip    # optional: name of the shared block
 debug: true            # optional: show every pill with sample values
 ```
 
+### Rooms
+
+`rooms` can also be a list, which is what the visual editor writes:
+
+```yaml
+status_strip:
+  rooms:
+    - key: living_room
+      name: Living Room
+      users: [Example Panel]          # logins that belong to this room
+      temperature: sensor.example_temperature
+      humidity: sensor.example_humidity
+      pills: shared                   # or `own`, with its own left/right lists
+```
+
 ## Visual editor
 
 Edit any strip card in the dashboard editor. The top of the form holds this

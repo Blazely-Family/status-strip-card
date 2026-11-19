@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -82,6 +82,23 @@ function chipValue(hass, chip) {
     return Number(raw).toFixed(chip.round) + (chip.unit ?? "");
   }
   return String(raw) + (chip.unit ?? "");
+}
+
+// Rooms as a list: { key, name, users, temperature, humidity, pills, left, right }.
+// Also reads the older shape (`rooms` as user -> key, plus `room_names`).
+function roomList(cfg) {
+  if (Array.isArray(cfg.rooms)) return cfg.rooms.filter((r) => r && r.key);
+  const names = cfg.room_names || {};
+  const map = cfg.rooms || {};
+  const keys = [...new Set([...Object.keys(names), ...Object.values(map)])];
+  return keys.map((key) => ({
+    key,
+    name: names[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    users: Object.keys(map).filter((u) => map[u] === key),
+    temperature: (cfg.room_temperature || "sensor.{room}_average_temperature").replace("{room}", key),
+    humidity: (cfg.room_humidity || "sensor.{room}_average_humidity").replace("{room}", key),
+    pills: "shared",
+  }));
 }
 
 class StatusStripCard extends HTMLElement {
@@ -181,17 +198,15 @@ class StatusStripCard extends HTMLElement {
     }
   }
 
+  // The room for this strip: the logged-in user's room, else the card's own.
   _room(hass, cfg) {
+    const rooms = roomList(cfg);
     const user = hass.user && hass.user.name;
-    const key = (cfg.rooms || {})[user] || cfg.room || (cfg.debug && Object.keys(cfg.room_names || {})[0]);
-    if (!key) return null;
-    const names = cfg.room_names || {};
-    return {
-      key,
-      name: names[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      temperature: (cfg.room_temperature || "sensor.{room}_average_temperature").replace("{room}", key),
-      humidity: (cfg.room_humidity || "sensor.{room}_average_humidity").replace("{room}", key),
-    };
+    const r =
+      rooms.find((x) => (x.users || []).includes(user)) ||
+      rooms.find((x) => x.key === cfg.room) ||
+      (cfg.debug ? rooms[0] : null);
+    return r || null;
   }
 
   _render(force) {
@@ -233,8 +248,10 @@ class StatusStripCard extends HTMLElement {
     if (!onlyWeather) {
       const room = this._room(hass, cfg);
       if (room) left.push(this._roomPill(hass, room));
-      for (const p of cfg.left || []) left.push(this._pill(hass, p));
-      for (const p of cfg.right || []) right.push(this._pill(hass, p));
+      // A room can use the shared pills or its own.
+      const own = room && room.pills === "own";
+      for (const p of (own ? room.left : cfg.left) || []) left.push(this._pill(hass, p));
+      for (const p of (own ? room.right : cfg.right) || []) right.push(this._pill(hass, p));
     }
     const weather = this._weather(hass, cfg.weather);
     const middle = weather || (onlyWeather ? "" : '<div class="spacer"></div>');
@@ -515,7 +532,9 @@ function formToPill(f, old) {
   return p;
 }
 
-const SHARED_KEYS = ["left", "right", "debug"];
+const SHARED_KEYS = ["left", "right", "debug", "rooms"];
+
+const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "room";
 
 class StatusStripCardEditor extends HTMLElement {
   constructor() {
@@ -535,6 +554,7 @@ class StatusStripCardEditor extends HTMLElement {
       const key = this._config.strip || "status_strip";
       const base = (ll && ll.config && ll.config[key]) || {};
       this._shared = JSON.parse(JSON.stringify({ ...base, ...(this._config._shared_draft || {}) }));
+      this._shared.rooms = roomList(this._shared);
     }
     this._render();
   }
@@ -579,8 +599,7 @@ class StatusStripCardEditor extends HTMLElement {
     root.innerHTML = `<style>${EDITOR_STYLE}</style>`;
 
     // This card.
-    const names = (this._shared && this._shared.room_names) || {};
-    const rooms = Object.keys(names).map((k) => ({ value: k, label: names[k] }));
+    const rooms = (this._shared.rooms || []).map((r) => ({ value: r.key, label: r.name || r.key }));
     const cardSchema = [
       { name: "room", selector: rooms.length ? { select: { mode: "dropdown", options: rooms } } : { text: {} } },
       { name: "only", selector: { select: { mode: "dropdown", options: [{ value: "weather", label: "Weather warning only" }] } } },
@@ -620,26 +639,121 @@ class StatusStripCardEditor extends HTMLElement {
         }
       )
     );
+    this._pillLists(root, this._shared, "shared");
+
+    // Rooms.
+    const h3 = document.createElement("h3");
+    h3.textContent = "Rooms";
+    root.append(h3);
+    const rnote = document.createElement("p");
+    rnote.className = "note";
+    rnote.textContent = "Which panel logins belong to each room, what the room pill shows, and whether the room uses the pills above or its own.";
+    root.append(rnote);
+    const roomsList = this._shared.rooms;
+    roomsList.forEach((r, i) => root.append(this._roomPanel(roomsList, r, i)));
+    const addRoom = document.createElement("button");
+    addRoom.className = "add";
+    addRoom.textContent = "+ Add room";
+    addRoom.addEventListener("click", () => {
+      roomsList.push({ key: `room_${roomsList.length + 1}`, name: "New room", users: [], pills: "shared" });
+      this._open[`room${roomsList.length - 1}`] = true;
+      this._sharedChanged();
+    });
+    root.append(addRoom);
+  }
+
+  // Left and right pill lists of `owner` (the shared block or a room).
+  _pillLists(root, owner, prefix) {
     for (const side of ["left", "right"]) {
       const h = document.createElement("h4");
       h.textContent = side === "left" ? "Left (informative)" : "Right (needs attention)";
       root.append(h);
-      const list = (this._shared[side] = this._shared[side] || []);
-      list.forEach((p, i) => root.append(this._pillPanel(side, list, p, i)));
+      const list = (owner[side] = owner[side] || []);
+      list.forEach((p, i) => root.append(this._pillPanel(`${prefix}-${side}`, list, p, i)));
       const add = document.createElement("button");
       add.className = "add";
       add.textContent = "+ Add pill";
       add.addEventListener("click", () => {
         list.push({ colour: "quiet", icon: "mdi:information-outline" });
-        this._open[`${side}${list.length - 1}`] = true;
+        this._open[`${prefix}-${side}${list.length - 1}`] = true;
         this._sharedChanged();
       });
       root.append(add);
     }
   }
 
-  _pillPanel(side, list, p, i) {
-    const key = `${side}${i}`;
+  _roomPanel(list, r, i) {
+    const key = `room${i}`;
+    const box = document.createElement("div");
+    box.className = "pill";
+    const head = document.createElement("div");
+    head.className = "head";
+    const sub = [(r.users || []).join(", "), r.pills === "own" ? "own pills" : "shared pills"].filter(Boolean).join(" · ");
+    head.innerHTML = `<ha-icon icon="mdi:home-outline"></ha-icon><span class="title">${esc(r.name || r.key)}<span class="sub">${esc(sub)}</span></span>`;
+    const del = document.createElement("button");
+    del.textContent = "✕";
+    del.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      list.splice(i, 1);
+      this._sharedChanged();
+    });
+    head.append(del);
+    head.addEventListener("click", () => {
+      this._open[key] = !this._open[key];
+      this._render();
+    });
+    box.append(head);
+    if (this._open[key]) {
+      const people = Object.values(this._hass.states)
+        .filter((s) => s.entity_id.startsWith("person."))
+        .map((s) => s.attributes.friendly_name || s.entity_id);
+      const schema = [
+        { name: "name", selector: { text: {} } },
+        { name: "users", selector: { select: { multiple: true, custom_value: true, options: [...new Set([...people, ...(r.users || [])])] } } },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            { name: "temperature", selector: { entity: { domain: "sensor" } } },
+            { name: "humidity", selector: { entity: { domain: "sensor" } } },
+          ],
+        },
+        {
+          name: "pills",
+          selector: { select: { mode: "dropdown", options: [{ value: "shared", label: "Shared pills" }, { value: "own", label: "Its own pills" }] } },
+        },
+      ];
+      const labels = { name: "Name shown", users: "Panel logins in this room", temperature: "Temperature", humidity: "Humidity", pills: "Pills" };
+      box.append(
+        this._form(schema, { name: r.name, users: r.users || [], temperature: r.temperature, humidity: r.humidity, pills: r.pills || "shared" }, labels, (v) => {
+          const wasOwn = r.pills === "own";
+          r.name = v.name;
+          r.users = v.users || [];
+          r.temperature = v.temperature;
+          r.humidity = v.humidity;
+          r.pills = v.pills || "shared";
+          // Going to own pills starts from a copy of the shared ones.
+          if (r.pills === "own" && !wasOwn && !r.left && !r.right) {
+            r.left = JSON.parse(JSON.stringify(this._shared.left || []));
+            r.right = JSON.parse(JSON.stringify(this._shared.right || []));
+          }
+          const t = head.querySelector(".title");
+          if (t) t.firstChild.textContent = v.name || r.key;
+          this._sharedChanged((r.pills === "own") !== wasOwn);
+        })
+      );
+      if (r.pills === "own") {
+        const inner = document.createElement("div");
+        inner.className = "inner";
+        this._pillLists(inner, r, `room${i}`);
+        box.append(inner);
+      }
+    }
+    return box;
+  }
+
+  _pillPanel(prefix, list, p, i) {
+    const key = `${prefix}${i}`;
     const box = document.createElement("div");
     box.className = "pill";
     const head = document.createElement("div");
@@ -707,6 +821,8 @@ h4 { margin: 16px 0 6px; font-size: 14px; color: var(--secondary-text-color); }
 .head button:disabled { opacity: 0.3; cursor: default; }
 .add { margin-bottom: 8px; }
 .pill ha-form { display: block; padding: 0 10px 10px; }
+.head .sub { display: block; font-size: 12px; color: var(--secondary-text-color); }
+.inner { padding: 0 10px 10px; }
 .emoji { font-size: 16px; }
 `;
 
