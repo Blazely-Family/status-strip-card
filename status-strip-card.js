@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -203,11 +203,33 @@ class StatusStripCard extends HTMLElement {
   // The room for this strip: the logged-in user's room, else the card's own.
   _room(hass, cfg) {
     const rooms = roomList(cfg);
-    const user = hass.user && hass.user.name;
-    const r =
-      rooms.find((x) => (x.users || []).includes(user)) ||
-      rooms.find((x) => x.key === cfg.room) ||
-      (cfg.debug ? rooms[0] : null);
+    const norm = (s) => String(s || "").trim().toLowerCase();
+    const who = [hass.user && hass.user.name, hass.user && hass.user.id].map(norm).filter(Boolean);
+    // 1. The logged-in user belongs to a room (by name or user id, any case).
+    // 2. This card names a room (the room's own view). That room is also
+    //    remembered for this browser, so...
+    // 3. ...shared views (Calendar, Cameras) keep showing the room this panel
+    //    last displayed, even if its login isn't mapped to a room.
+    const byUser = rooms.find((x) => (x.users || []).some((u) => who.includes(norm(u))));
+    const byCard = rooms.find((x) => x.key === cfg.room);
+    if (byCard) {
+      try {
+        localStorage.setItem("status-strip-card:room", byCard.key);
+      } catch (e) {
+        /* storage unavailable */
+      }
+    }
+    let remembered = null;
+    try {
+      remembered = rooms.find((x) => x.key === localStorage.getItem("status-strip-card:room"));
+    } catch (e) {
+      /* storage unavailable */
+    }
+    if (!byUser && rooms.length && !this._loggedUser) {
+      this._loggedUser = true;
+      console.info(`status-strip-card: login "${hass.user && hass.user.name}" (${hass.user && hass.user.id}) isn't in any room's users`);
+    }
+    const r = byUser || byCard || remembered || (cfg.debug ? rooms[0] : null);
     return r || null;
   }
 
