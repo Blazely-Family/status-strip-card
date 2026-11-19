@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -235,8 +235,10 @@ class StatusStripCard extends HTMLElement {
 }
 
 const STYLE = `
-:host { display: block; }
-.strip {
+/* Fill whatever height the layout gives the card (a sections row is 56px)
+   and centre the 38px pills in it. */
+:host { display: flex; align-items: center; height: 100%; min-height: 38px; }
+.strip { flex: 1 1 auto; min-width: 0;
   display: flex; align-items: center; gap: 8px; min-height: 38px;
   font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, inherit));
 }
