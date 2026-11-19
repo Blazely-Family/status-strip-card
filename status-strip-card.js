@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -94,6 +94,17 @@ class StatusStripCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     this._render();
+    if (this._own && this._own._shared_draft && !this._isPreview()) this._promoteDraft(hass);
+  }
+
+  // True inside the card editor's preview, where the draft must stay put.
+  _isPreview() {
+    let n = this;
+    while (n) {
+      if (n.tagName && /^(HUI-DIALOG-EDIT-CARD|HUI-CARD-PREVIEW|HUI-CARD-ELEMENT-EDITOR)$/.test(n.tagName)) return true;
+      n = n.parentNode || n.host;
+    }
+    return false;
   }
 
   connectedCallback() {
@@ -115,40 +126,59 @@ class StatusStripCard extends HTMLElement {
   _config() {
     const key = this._own.strip || "status_strip";
     const ll = getLovelace();
-    const shared = (ll && ll.config && ll.config[key]) || {};
+    let shared = (ll && ll.config && ll.config[key]) || {};
+    // A shared-pill edit made in the card editor rides on the card as
+    // `_shared_draft` until it is moved into the dashboard (see _promoteDraft).
+    if (this._own._shared_draft) shared = { ...shared, ...this._own._shared_draft };
+    const own = { ...this._own };
+    delete own._shared_draft;
     // Debug is on when either the shared block or this card turns it on.
-    return { ...shared, ...this._own, debug: !!(shared.debug || this._own.debug) };
+    return { ...shared, ...own, debug: !!(shared.debug || own.debug) };
   }
 
-  // The visual editor HA shows for this card: per-card settings only. The
-  // shared pill list is edited on the strip's settings page (see README).
-  static getConfigForm() {
-    const ll = getLovelace();
-    const shared = (ll && ll.config && ll.config.status_strip) || {};
-    const names = shared.room_names || {};
-    const rooms = Object.keys(names).map((k) => ({ value: k, label: names[k] }));
-    return {
-      schema: [
-        {
-          name: "room",
-          selector: rooms.length ? { select: { mode: "dropdown", options: rooms } } : { text: {} },
-        },
-        { name: "only", selector: { select: { mode: "dropdown", options: [{ value: "weather", label: "Weather warning only" }] } } },
-        { name: "debug", selector: { boolean: {} } },
-      ],
-      computeLabel: (s) =>
-        ({ room: "Room (when the logged-in user isn't a panel)", only: "Show", debug: "Debug: show every pill" }[s.name]),
-      computeHelper: (s) =>
-        ({
-          room: "Panel logins always show their own room.",
-          only: "Leave empty for the full strip.",
-          debug: "Shows all pills with sample values, on this card only.",
-        }[s.name]),
-    };
+  static getConfigElement() {
+    return document.createElement("status-strip-card-editor");
   }
 
   static getStubConfig() {
     return {};
+  }
+
+  // HA's card dialog saves the whole dashboard from the copy it took when it
+  // opened, so the editor cannot write the shared block itself without being
+  // overwritten. Instead it saves the edit on the card as `_shared_draft`;
+  // once that card is live, this moves the draft into the shared block.
+  async _promoteDraft(hass) {
+    if (!this._own._shared_draft || this._promoting || !(hass.user && hass.user.is_admin)) return;
+    const ll = getLovelace();
+    if (!ll || ll.editMode) return;
+    this._promoting = true;
+    try {
+      const urlPath = ll.urlPath || null;
+      const config = await hass.callWS({ type: "lovelace/config", url_path: urlPath });
+      const key = this._own.strip || "status_strip";
+      let draft = null;
+      const strip = (cards) => {
+        for (const c of cards || []) {
+          if (c && c.type === "custom:status-strip-card" && c._shared_draft) {
+            draft = c._shared_draft;
+            delete c._shared_draft;
+          }
+          if (c && c.cards) strip(c.cards);
+        }
+      };
+      for (const v of config.views || []) {
+        strip(v.cards);
+        for (const s of v.sections || []) strip(s.cards);
+      }
+      if (!draft) return;
+      config[key] = { ...(config[key] || {}), ...draft };
+      await hass.callWS({ type: "lovelace/config/save", url_path: urlPath, config });
+    } catch (e) {
+      console.warn("status-strip-card: could not save the shared pill list", e);
+    } finally {
+      this._promoting = false;
+    }
   }
 
   _room(hass, cfg) {
@@ -231,7 +261,8 @@ class StatusStripCard extends HTMLElement {
       const colour = COLOURS[p.colour] || COLOURS.quiet;
       const iconStyle = p.icon_colour ? ` style="color:${esc(p.icon_colour)}"` : "";
       const glow = p.glow ? " glow" : "";
-      const lead = `<div class="chip lead${glow}" style="background:${colour.bg};color:${colour.fg}"><ha-icon icon="${esc(p.icon)}"${iconStyle}></ha-icon>${p.label ? `<span>${esc(p.label)}</span>` : ""}</div>`;
+      const glyph = p.emoji ? `<span class="emoji">${esc(p.emoji)}</span>` : p.icon ? `<ha-icon icon="${esc(p.icon)}"${iconStyle}></ha-icon>` : "";
+      const lead = `<div class="chip lead${glow}" style="background:${colour.bg};color:${colour.fg}">${glyph}${p.label ? `<span>${esc(p.label)}</span>` : ""}</div>`;
       const chips = [];
       for (const c of p.chips || []) {
         let v = chipValue(hass, c);
@@ -240,7 +271,8 @@ class StatusStripCard extends HTMLElement {
         if (c.hide_zero && (v === "0" || Number(v) === 0)) continue;
         const cc = c.colour ? `--c:${esc(c.colour)}` : "";
         const cls = c.colour ? "chip tinted" : "chip grey";
-        chips.push(`<div class="${cls}" style="${cc}">${c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : ""}<span>${esc(v)}</span></div>`);
+        const cg = c.emoji ? `<span class="emoji">${esc(c.emoji)}</span>` : c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : "";
+        chips.push(`<div class="${cls}" style="${cc}">${cg}<span>${esc(v)}</span></div>`);
       }
       const tap = p.tap === false ? "" : p.tap || (p.show && p.show.entity) || "";
       const tapAttr = tap ? ` data-tap="${esc(tap)}"` : "";
@@ -299,6 +331,7 @@ const STYLE = `
 .chip.tinted { background: color-mix(in srgb, var(--c) 30%, transparent); color: color-mix(in srgb, var(--c) 88%, white); }
 .chip.tinted span { color: color-mix(in srgb, var(--c) 30%, white); }
 ha-icon { display: flex; line-height: 0; }
+.emoji { font-size: 15px; line-height: 1; }
 ha-icon.temp { color: #ff9a3c; }
 ha-icon.hum { color: #4aa3ff; }
 .glow ha-icon { color: #ffd54f; filter: drop-shadow(0 0 3px rgba(255, 200, 80, 0.95)) drop-shadow(0 0 6px rgba(255, 180, 60, 0.6)); }
@@ -325,6 +358,361 @@ ha-icon.hum { color: #4aa3ff; }
 }
 @keyframes belt { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
 `;
+
+/* ------------------------------------------------------------------ editor */
+
+const COLOUR_OPTIONS = [
+  { value: "quiet", label: "Quiet (grey glass)" },
+  { value: "grey", label: "Grey" },
+  { value: "yellow", label: "Yellow (needs attention)" },
+  { value: "green", label: "Green" },
+  { value: "blue", label: "Blue" },
+];
+
+const PILL_SCHEMA = [
+  { name: "entity", selector: { entity: {} } },
+  {
+    name: "show_when",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "on", label: "Entity is on" },
+          { value: "off", label: "Entity is off" },
+          { value: "above_0", label: "Entity is above 0" },
+          { value: "has_value", label: "Entity has any value" },
+          { value: "always", label: "Always" },
+        ],
+      },
+    },
+  },
+  { name: "label", selector: { text: {} } },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "icon", selector: { icon: {} } },
+      { name: "emoji", selector: { text: {} } },
+    ],
+  },
+  { name: "colour", selector: { select: { mode: "dropdown", options: COLOUR_OPTIONS } } },
+  {
+    name: "value",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "none", label: "No value" },
+          { value: "state", label: "State" },
+          { value: "countdown", label: "Time until (timestamp)" },
+          { value: "elapsed", label: "Time since (timestamp)" },
+        ],
+      },
+    },
+  },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "value_entity", selector: { entity: {} } },
+      { name: "value_icon", selector: { icon: {} } },
+    ],
+  },
+  {
+    name: "tap",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "more_info", label: "Open the entity" },
+          { value: "entity", label: "Open another entity" },
+          { value: "navigate", label: "Go to a page" },
+          { value: "none", label: "Nothing" },
+        ],
+      },
+    },
+  },
+  { name: "tap_target", selector: { text: {} } },
+  { name: "extra_chips", selector: { object: {} } },
+];
+
+const PILL_LABELS = {
+  entity: "Entity",
+  show_when: "Show when",
+  label: "Label (optional)",
+  icon: "Icon",
+  emoji: "or emoji",
+  colour: "Colour",
+  value: "Value shown",
+  value_entity: "Value entity (default: the entity)",
+  value_icon: "Value icon",
+  tap: "On tap",
+  tap_target: "Tap target (entity or /path)",
+  extra_chips: "More value chips (advanced, YAML)",
+};
+
+// Pill config -> flat form data, and back. Anything the form can't express
+// (an `any` show rule, extra chips) is kept as-is.
+function pillToForm(p) {
+  const s = p.show || {};
+  let show_when = "has_value";
+  if (!p.show) show_when = "always";
+  else if (s.any || Array.isArray(s)) show_when = "advanced";
+  else if (s.state === "on") show_when = "on";
+  else if (s.state === "off") show_when = "off";
+  else if (Number(s.above) === 0) show_when = "above_0";
+  const [first, ...rest] = p.chips || [];
+  let tap = "more_info";
+  let tap_target = "";
+  if (p.tap === false) tap = "none";
+  else if (typeof p.tap === "string" && p.tap.startsWith("/")) [tap, tap_target] = ["navigate", p.tap];
+  else if (typeof p.tap === "string" && p.tap !== s.entity) [tap, tap_target] = ["entity", p.tap];
+  return {
+    entity: s.entity || (s.any && s.any[0] && s.any[0].entity) || "",
+    show_when,
+    label: p.label || "",
+    icon: p.icon || "",
+    emoji: p.emoji || "",
+    colour: p.colour || "quiet",
+    value: first ? first.value || "state" : "none",
+    value_entity: first && first.entity !== s.entity ? first.entity : "",
+    value_icon: (first && first.icon) || "",
+    tap,
+    tap_target,
+    extra_chips: rest.length ? rest : undefined,
+  };
+}
+
+function formToPill(f, old) {
+  const p = {};
+  const keep = (k) => old && old[k] !== undefined && (p[k] = old[k]);
+  if (f.show_when === "advanced") keep("show");
+  else if (f.show_when !== "always" && f.entity) {
+    p.show = { entity: f.entity };
+    if (f.show_when === "on") p.show.state = "on";
+    if (f.show_when === "off") p.show.state = "off";
+    if (f.show_when === "above_0") p.show.above = 0;
+  }
+  if (f.icon) p.icon = f.icon;
+  if (f.emoji) p.emoji = f.emoji;
+  if (f.label) p.label = f.label;
+  p.colour = f.colour || "quiet";
+  ["icon_colour", "glow"].forEach(keep);
+  if (f.tap === "none") p.tap = false;
+  else if ((f.tap === "navigate" || f.tap === "entity") && f.tap_target) p.tap = f.tap_target;
+  else if (f.show_when === "advanced" && old && old.tap !== undefined) p.tap = old.tap;
+  const chips = [];
+  if (f.value && f.value !== "none") {
+    const firstOld = (old && old.chips && old.chips[0]) || {};
+    const c = { ...firstOld, entity: f.value_entity || f.entity, value: f.value === "state" ? undefined : f.value };
+    if (f.value_icon) c.icon = f.value_icon;
+    else delete c.icon;
+    if (c.value === undefined) delete c.value;
+    chips.push(c);
+  }
+  if (Array.isArray(f.extra_chips)) chips.push(...f.extra_chips);
+  if (chips.length) p.chips = chips;
+  return p;
+}
+
+const SHARED_KEYS = ["left", "right", "debug"];
+
+class StatusStripCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._open = {};
+  }
+
+  setConfig(config) {
+    // HA hands our own change straight back; re-rendering then would steal
+    // focus from the field being typed in.
+    const echo = this._lastFired && JSON.stringify(config) === this._lastFired;
+    this._config = config || {};
+    if (echo) return;
+    if (!this._shared) {
+      const ll = getLovelace();
+      const key = this._config.strip || "status_strip";
+      const base = (ll && ll.config && ll.config[key]) || {};
+      this._shared = JSON.parse(JSON.stringify({ ...base, ...(this._config._shared_draft || {}) }));
+    }
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this.shadowRoot.querySelectorAll("ha-form").forEach((f) => (f.hass = hass));
+    if (!this._rendered) this._render();
+  }
+
+  _fire(config) {
+    this._config = config;
+    this._lastFired = JSON.stringify(config);
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
+  }
+
+  _sharedChanged(rerender = true) {
+    const draft = {};
+    SHARED_KEYS.forEach((k) => this._shared[k] !== undefined && (draft[k] = JSON.parse(JSON.stringify(this._shared[k]))));
+    this._fire({ ...this._config, _shared_draft: draft });
+    if (rerender) this._render();
+  }
+
+  _form(schema, data, labels, onChange) {
+    const f = document.createElement("ha-form");
+    f.hass = this._hass;
+    f.schema = schema;
+    f.data = data;
+    f.computeLabel = (s) => labels[s.name] || s.name;
+    f.addEventListener("value-changed", (ev) => {
+      ev.stopPropagation();
+      f.data = ev.detail.value;
+      onChange(ev.detail.value);
+    });
+    return f;
+  }
+
+  _render() {
+    if (!this._hass || !this._config) return;
+    this._rendered = true;
+    const root = this.shadowRoot;
+    root.innerHTML = `<style>${EDITOR_STYLE}</style>`;
+
+    // This card.
+    const names = (this._shared && this._shared.room_names) || {};
+    const rooms = Object.keys(names).map((k) => ({ value: k, label: names[k] }));
+    const cardSchema = [
+      { name: "room", selector: rooms.length ? { select: { mode: "dropdown", options: rooms } } : { text: {} } },
+      { name: "only", selector: { select: { mode: "dropdown", options: [{ value: "weather", label: "Weather warning only" }] } } },
+    ];
+    const h1 = document.createElement("h3");
+    h1.textContent = "This card";
+    root.append(h1);
+    root.append(
+      this._form(
+        cardSchema,
+        { room: this._config.room, only: this._config.only },
+        { room: "Room (for logins that aren't a panel)", only: "Show (empty = full strip)" },
+        (v) => {
+          const c = { ...this._config };
+          ["room", "only"].forEach((k) => (v[k] ? (c[k] = v[k]) : delete c[k]));
+          this._fire(c);
+        }
+      )
+    );
+
+    // Shared pills.
+    const h2 = document.createElement("h3");
+    h2.textContent = "Pills on every strip";
+    root.append(h2);
+    const note = document.createElement("p");
+    note.className = "note";
+    note.textContent = "Changes here apply to all strips on this dashboard once you save this card.";
+    root.append(note);
+    root.append(
+      this._form(
+        [{ name: "debug", selector: { boolean: {} } }],
+        { debug: !!this._shared.debug },
+        { debug: "Debug: show every pill on every strip" },
+        (v) => {
+          this._shared.debug = !!v.debug;
+          this._sharedChanged(false);
+        }
+      )
+    );
+    for (const side of ["left", "right"]) {
+      const h = document.createElement("h4");
+      h.textContent = side === "left" ? "Left (informative)" : "Right (needs attention)";
+      root.append(h);
+      const list = (this._shared[side] = this._shared[side] || []);
+      list.forEach((p, i) => root.append(this._pillPanel(side, list, p, i)));
+      const add = document.createElement("button");
+      add.className = "add";
+      add.textContent = "+ Add pill";
+      add.addEventListener("click", () => {
+        list.push({ colour: "quiet", icon: "mdi:information-outline" });
+        this._open[`${side}${list.length - 1}`] = true;
+        this._sharedChanged();
+      });
+      root.append(add);
+    }
+  }
+
+  _pillPanel(side, list, p, i) {
+    const key = `${side}${i}`;
+    const box = document.createElement("div");
+    box.className = "pill";
+    const head = document.createElement("div");
+    head.className = "head";
+    const title = p.label || (p.show && p.show.entity) || p.emoji || p.icon || "New pill";
+    head.innerHTML = `${p.emoji ? `<span class="emoji">${esc(p.emoji)}</span>` : p.icon ? `<ha-icon icon="${esc(p.icon)}"></ha-icon>` : ""}<span class="title">${esc(title)}</span>`;
+    const btn = (label, fn, disabled) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.disabled = !!disabled;
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        fn();
+      });
+      head.append(b);
+    };
+    btn("↑", () => {
+      [list[i - 1], list[i]] = [list[i], list[i - 1]];
+      this._sharedChanged();
+    }, i === 0);
+    btn("↓", () => {
+      [list[i + 1], list[i]] = [list[i], list[i + 1]];
+      this._sharedChanged();
+    }, i === list.length - 1);
+    btn("✕", () => {
+      list.splice(i, 1);
+      this._sharedChanged();
+    });
+    head.addEventListener("click", () => {
+      this._open[key] = !this._open[key];
+      this._render();
+    });
+    box.append(head);
+    if (this._open[key]) {
+      const data = pillToForm(p);
+      const schema = data.show_when === "advanced"
+        ? PILL_SCHEMA.map((s) => s.name === "show_when"
+            ? { ...s, selector: { select: { mode: "dropdown", options: [{ value: "advanced", label: "Custom rule (kept from YAML)" }, ...s.selector.select.options] } } }
+            : s)
+        : PILL_SCHEMA;
+      box.append(
+        this._form(schema, data, PILL_LABELS, (v) => {
+          list[i] = formToPill(v, list[i]);
+          const t = head.querySelector(".title");
+          if (t) t.textContent = v.label || v.entity || v.emoji || v.icon || "New pill";
+          this._sharedChanged(false);
+        })
+      );
+    }
+    return box;
+  }
+}
+
+const EDITOR_STYLE = `
+h3 { margin: 20px 0 4px; font-size: 16px; }
+h4 { margin: 16px 0 6px; font-size: 14px; color: var(--secondary-text-color); }
+.note { margin: 0 0 8px; font-size: 13px; color: var(--secondary-text-color); }
+.pill { border: 1px solid var(--divider-color); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+.head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; }
+.head .title { flex: 1; }
+.head button, .add {
+  background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: var(--primary-text-color);
+  padding: 2px 8px; cursor: pointer; font: inherit;
+}
+.head button:disabled { opacity: 0.3; cursor: default; }
+.add { margin-bottom: 8px; }
+.pill ha-form { display: block; padding: 0 10px 10px; }
+.emoji { font-size: 16px; }
+`;
+
+if (!customElements.get("status-strip-card-editor")) {
+  customElements.define("status-strip-card-editor", StatusStripCardEditor);
+}
 
 if (!customElements.get("status-strip-card")) {
   customElements.define("status-strip-card", StatusStripCard);

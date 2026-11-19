@@ -59,8 +59,17 @@ strip: status_strip    # optional: name of the shared block
 debug: true            # optional: show every pill with sample values
 ```
 
-These per-card settings also have a visual editor in HA's card dialog.
-`debug: true` in the shared block turns debug on for every card.
+## Visual editor
+
+Edit any strip card in the dashboard editor. The top of the form holds this
+card's settings; below it you can add, remove, reorder and edit the shared
+pills (entity, show rule, label, MDI icon or emoji, colour, value and tap),
+and switch on **Debug** to show every pill on every strip with sample values.
+
+HA's card dialog saves the dashboard from the copy it took when it opened, so
+shared-pill edits are saved on the card as `_shared_draft`. The first time an
+admin views the dashboard afterwards (out of edit mode), the card moves the
+draft into the shared block.
 
 ### Pill keys
 
