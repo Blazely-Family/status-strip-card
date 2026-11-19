@@ -95,7 +95,7 @@ draft into the shared block.
 | `colour` | Lead chip colour: `yellow`, `green`, `blue`, `grey`, `quiet` (default). |
 | `icon_colour`, `glow` | Icon colour on a quiet chip; `glow: true` adds a soft glow. |
 | `chips` | Value chips: `{ entity, attribute?, value: state \| countdown \| elapsed, icon?, colour?, unit?, round?, hide_zero? }`. `countdown`/`elapsed` read a timestamp. |
-| `tap` | Entity to open in more-info, a `/path` to navigate to, or `false`. Defaults to the `show` entity. |
+| `tap` | Entity to open in more-info, a `/path` to navigate to, `false`, or a standard HA action object (e.g. `fire-dom-event` for a Browser Mod pop-up). Defaults to the `show` entity. |
 
 Styling uses HA theme variables; override with `--status-strip-pill-background`,
 `--status-strip-pill-border`, `--status-strip-pill-radius`,

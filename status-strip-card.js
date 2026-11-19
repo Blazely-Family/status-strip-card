@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -234,6 +234,14 @@ class StatusStripCard extends HTMLElement {
 
   _tap(target) {
     if (!target) return;
+    if (target.startsWith("json:")) {
+      // Hand a full action to HA's own action handler, like any built-in card.
+      const action = JSON.parse(target.slice(5));
+      this.dispatchEvent(
+        new CustomEvent("hass-action", { detail: { config: { tap_action: action }, action: "tap" }, bubbles: true, composed: true })
+      );
+      return;
+    }
     if (target.startsWith("/")) {
       history.pushState(null, "", target);
       window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
@@ -293,7 +301,9 @@ class StatusStripCard extends HTMLElement {
         const cg = c.emoji ? `<span class="emoji">${esc(c.emoji)}</span>` : c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : "";
         chips.push(`<div class="${cls}" style="${cc}">${cg}<span>${esc(v)}</span></div>`);
       }
-      const tap = p.tap === false ? "" : p.tap || (p.show && p.show.entity) || "";
+      // `tap` may also be a standard HA action object (e.g. fire-dom-event for a Browser Mod pop-up).
+      const tap =
+        p.tap === false ? "" : typeof p.tap === "object" ? `json:${JSON.stringify(p.tap)}` : p.tap || (p.show && p.show.entity) || "";
       const tapAttr = tap ? ` data-tap="${esc(tap)}"` : "";
       return `<div class="pill${tap ? " tap" : ""}"${tapAttr}>${lead}${chips.join("")}</div>`;
     } catch (e) {
@@ -447,6 +457,7 @@ const PILL_SCHEMA = [
           { value: "entity", label: "Open another entity" },
           { value: "navigate", label: "Go to a page" },
           { value: "none", label: "Nothing" },
+          { value: "custom", label: "Custom action (kept from YAML)" },
         ],
       },
     },
@@ -484,6 +495,7 @@ function pillToForm(p) {
   let tap = "more_info";
   let tap_target = "";
   if (p.tap === false) tap = "none";
+  else if (p.tap && typeof p.tap === "object") tap = "custom";
   else if (typeof p.tap === "string" && p.tap.startsWith("/")) [tap, tap_target] = ["navigate", p.tap];
   else if (typeof p.tap === "string" && p.tap !== s.entity) [tap, tap_target] = ["entity", p.tap];
   return {
@@ -518,6 +530,7 @@ function formToPill(f, old) {
   p.colour = f.colour || "quiet";
   ["icon_colour", "glow"].forEach(keep);
   if (f.tap === "none") p.tap = false;
+  else if (f.tap === "custom" && old && typeof old.tap === "object") p.tap = old.tap;
   else if ((f.tap === "navigate" || f.tap === "entity") && f.tap_target) p.tap = f.tap_target;
   else if (f.show_when === "advanced" && old && old.tap !== undefined) p.tap = old.tap;
   const chips = [];
