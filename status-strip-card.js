@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -106,6 +106,8 @@ class StatusStripCard extends HTMLElement {
     this._own = config || {};
     this._sig = null;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    // Redraw straight away on a config change (e.g. the editor's preview).
+    if (this._hass) this._render(true);
   }
 
   set hass(hass) {
