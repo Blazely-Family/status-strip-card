@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.5.1";
+const VERSION = "0.6.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -274,7 +274,10 @@ class StatusStripCard extends HTMLElement {
 
   _html(hass, cfg) {
     this._debug = !!cfg.debug;
+    // `only`: "weather" = just the weather bar; "left" = the left (informative)
+    // pills and the weather bar, without the right-hand alerts (e.g. a screensaver).
     const onlyWeather = cfg.only === "weather";
+    const leftOnly = cfg.only === "left";
     const left = [];
     const right = [];
     if (!onlyWeather) {
@@ -283,7 +286,7 @@ class StatusStripCard extends HTMLElement {
       // A room can use the shared pills or its own.
       const own = room && room.pills === "own";
       for (const p of (own ? room.left : cfg.left) || []) left.push(this._pill(hass, p));
-      for (const p of (own ? room.right : cfg.right) || []) right.push(this._pill(hass, p));
+      if (!leftOnly) for (const p of (own ? room.right : cfg.right) || []) right.push(this._pill(hass, p));
     }
     const weather = this._weather(hass, cfg.weather);
     const middle = weather || (onlyWeather ? "" : '<div class="spacer"></div>');
@@ -639,7 +642,7 @@ class StatusStripCardEditor extends HTMLElement {
     const rooms = (this._shared.rooms || []).map((r) => ({ value: r.key, label: r.name || r.key }));
     const cardSchema = [
       { name: "room", selector: rooms.length ? { select: { mode: "dropdown", options: rooms } } : { text: {} } },
-      { name: "only", selector: { select: { mode: "dropdown", options: [{ value: "weather", label: "Weather warning only" }] } } },
+      { name: "only", selector: { select: { mode: "dropdown", options: [{ value: "weather", label: "Weather warning only" }, { value: "left", label: "Left side and weather (no alerts)" }] } } },
     ];
     const h1 = document.createElement("h3");
     h1.textContent = "This card";

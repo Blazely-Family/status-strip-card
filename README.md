@@ -54,7 +54,7 @@ Each card:
 ```yaml
 type: custom:status-strip-card
 room: living_room      # optional
-only: weather          # optional: just the weather bar
+only: weather          # optional: just the weather bar ("left": left pills + weather, no alerts)
 strip: status_strip    # optional: name of the shared block
 debug: true            # optional: show every pill with sample values
 ```
