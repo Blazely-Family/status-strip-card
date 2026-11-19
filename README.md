@@ -56,7 +56,11 @@ type: custom:status-strip-card
 room: living_room      # optional
 only: weather          # optional: just the weather bar
 strip: status_strip    # optional: name of the shared block
+debug: true            # optional: show every pill with sample values
 ```
+
+These per-card settings also have a visual editor in HA's card dialog.
+`debug: true` in the shared block turns debug on for every card.
 
 ### Pill keys
 

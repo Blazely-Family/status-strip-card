@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.1.2";
+const VERSION = "0.2.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -116,12 +116,44 @@ class StatusStripCard extends HTMLElement {
     const key = this._own.strip || "status_strip";
     const ll = getLovelace();
     const shared = (ll && ll.config && ll.config[key]) || {};
-    return { ...shared, ...this._own };
+    // Debug is on when either the shared block or this card turns it on.
+    return { ...shared, ...this._own, debug: !!(shared.debug || this._own.debug) };
+  }
+
+  // The visual editor HA shows for this card: per-card settings only. The
+  // shared pill list is edited on the strip's settings page (see README).
+  static getConfigForm() {
+    const ll = getLovelace();
+    const shared = (ll && ll.config && ll.config.status_strip) || {};
+    const names = shared.room_names || {};
+    const rooms = Object.keys(names).map((k) => ({ value: k, label: names[k] }));
+    return {
+      schema: [
+        {
+          name: "room",
+          selector: rooms.length ? { select: { mode: "dropdown", options: rooms } } : { text: {} },
+        },
+        { name: "only", selector: { select: { mode: "dropdown", options: [{ value: "weather", label: "Weather warning only" }] } } },
+        { name: "debug", selector: { boolean: {} } },
+      ],
+      computeLabel: (s) =>
+        ({ room: "Room (when the logged-in user isn't a panel)", only: "Show", debug: "Debug: show every pill" }[s.name]),
+      computeHelper: (s) =>
+        ({
+          room: "Panel logins always show their own room.",
+          only: "Leave empty for the full strip.",
+          debug: "Shows all pills with sample values, on this card only.",
+        }[s.name]),
+    };
+  }
+
+  static getStubConfig() {
+    return {};
   }
 
   _room(hass, cfg) {
     const user = hass.user && hass.user.name;
-    const key = (cfg.rooms || {})[user] || cfg.room;
+    const key = (cfg.rooms || {})[user] || cfg.room || (cfg.debug && Object.keys(cfg.room_names || {})[0]);
     if (!key) return null;
     const names = cfg.room_names || {};
     return {
@@ -164,6 +196,7 @@ class StatusStripCard extends HTMLElement {
   }
 
   _html(hass, cfg) {
+    this._debug = !!cfg.debug;
     const onlyWeather = cfg.only === "weather";
     const left = [];
     const right = [];
@@ -194,14 +227,15 @@ class StatusStripCard extends HTMLElement {
   // A pill: a lead chip (icon, optional label, colour) and value chips.
   _pill(hass, p) {
     try {
-      if (!passes(hass, p.show)) return "";
+      if (!this._debug && !passes(hass, p.show)) return "";
       const colour = COLOURS[p.colour] || COLOURS.quiet;
       const iconStyle = p.icon_colour ? ` style="color:${esc(p.icon_colour)}"` : "";
       const glow = p.glow ? " glow" : "";
       const lead = `<div class="chip lead${glow}" style="background:${colour.bg};color:${colour.fg}"><ha-icon icon="${esc(p.icon)}"${iconStyle}></ha-icon>${p.label ? `<span>${esc(p.label)}</span>` : ""}</div>`;
       const chips = [];
       for (const c of p.chips || []) {
-        const v = chipValue(hass, c);
+        let v = chipValue(hass, c);
+        if (this._debug && (v === null || v === "0")) v = c.value === "countdown" || c.value === "elapsed" ? "1h 0m" : "1";
         if (v === null) continue;
         if (c.hide_zero && (v === "0" || Number(v) === 0)) continue;
         const cc = c.colour ? `--c:${esc(c.colour)}` : "";
@@ -220,9 +254,10 @@ class StatusStripCard extends HTMLElement {
   _weather(hass, w) {
     if (!w) return "";
     try {
-      if (!passes(hass, w.show)) return "";
+      if (!this._debug && !passes(hass, w.show)) return "";
       const st = hass.states[w.text];
-      const text = st && (w.attribute ? st.attributes[w.attribute] : st.state);
+      let text = st && (w.attribute ? st.attributes[w.attribute] : st.state);
+      if (this._debug && (!text || EMPTY.includes(String(text)))) text = "DEBUG: sample weather warning";
       if (!text || EMPTY.includes(String(text))) return "";
       const reps = Math.max(2, Math.floor(220 / (String(text).length + 7)) + 1);
       const seg = `${esc(text)}&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;`.repeat(reps);
