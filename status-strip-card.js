@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.7.0";
+const VERSION = "0.7.1";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -514,7 +514,7 @@ class StatusStripPopup extends HTMLElement {
           <div class="icon"><ha-icon icon="${esc(ri)}"></ha-icon></div>
           <div class="txt"><div class="name">${esc(i.name || (st && st.attributes.friendly_name) || i.entity_id)}</div>${
             i.secondary ? `<div class="sec">${esc(i.secondary)}</div>` : ""
-          }</div>${since}<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></div>`;
+          }</div>${since}</div>`;
       })
       .join("");
     const body = rows || `<div class="empty">${esc(c.empty || "Nothing to show")}</div>`;
@@ -575,7 +575,6 @@ ha-icon { display: flex; line-height: 0; }
 .name { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sec { font-size: 13px; margin-top: 2px; color: var(--secondary-text-color, #a3a7b0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .since { flex: none; font-size: 13px; text-align: right; color: var(--secondary-text-color, #a3a7b0); }
-.chev { flex: none; color: var(--secondary-text-color, #7d818b); --mdc-icon-size: 22px; }
 .empty { padding: 16px 20px; color: var(--secondary-text-color, #a3a7b0); }
 `;
 
