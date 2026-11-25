@@ -96,6 +96,32 @@ draft into the shared block.
 | `icon_colour`, `glow` | Icon colour on a quiet chip; `glow: true` adds a soft glow. |
 | `chips` | Value chips: `{ entity, attribute?, value: state \| countdown \| elapsed, icon?, colour?, unit?, round?, hide_zero? }`. `countdown`/`elapsed` read a timestamp. |
 | `tap` | Entity to open in more-info, a `/path` to navigate to, `false`, or a standard HA action object (e.g. `fire-dom-event` for a Browser Mod pop-up). Defaults to the `show` entity. |
+| `popup` | Opens the card's own list pop-up instead of `tap`: `{ entity, attribute?, title?, icon?, colour?, noun?, since?, empty? }`. See below. |
+
+### List pop-up
+
+A pill's `popup` draws a list that a Home Assistant helper provides; the card
+adds no logic of its own. `entity`'s `attribute` (default `items`) must be a
+list of `{ entity_id, name, secondary?, icon? }`. Each item is one row: the
+name, the secondary line under it, and (unless `since: false`) when that
+entity last changed. Tapping a row opens HA's own more-info dialog for its
+`entity_id`. `title`, `icon` and `colour` default to the pill's `label`,
+`icon` and `colour`; `noun: device` makes the header read "1 device".
+The pop-up uses the theme's `--ha-dialog-surface-background`; override it with
+`--status-strip-popup-background` and `--status-strip-popup-backdrop`.
+
+```yaml
+- show: { entity: sensor.example_offline_devices, above: 0 }
+  icon: mdi:access-point-network-off
+  label: Offline
+  colour: yellow
+  chips:
+    - { entity: sensor.example_offline_devices }
+  popup:
+    entity: sensor.example_offline_devices
+    attribute: devices
+    noun: device
+```
 
 Styling uses HA theme variables; override with `--status-strip-pill-background`,
 `--status-strip-pill-border`, `--status-strip-pill-radius`,
