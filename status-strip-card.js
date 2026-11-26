@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.12.0";
+const VERSION = "0.13.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -84,6 +84,12 @@ function chipValue(hass, chip) {
     if (Number.isNaN(t)) return null;
     const mins = mode === "countdown" ? (t - Date.now()) / 60000 : (Date.now() - t) / 60000;
     return (chip.prefix ?? "") + duration(mins);
+  }
+  // `duration`: a length of time in seconds (e.g. a UPS's runtime left), shown
+  // in the same format as the countdown chips.
+  if (mode === "duration") {
+    if (Number.isNaN(Number(raw))) return null;
+    return (chip.prefix ?? "") + duration(Number(raw) / 60);
   }
   // `prefix` / `unit` wrap the value, e.g. "UPS " + 14 + " min".
   if (chip.round !== undefined && !Number.isNaN(Number(raw))) {
