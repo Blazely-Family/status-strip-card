@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -17,6 +17,7 @@ const COLOURS = {
   blue: { bg: "#3a7ca5", fg: "#f2f8fc" },
   grey: { bg: "rgba(158, 158, 158, 0.35)", fg: "#eaebee" },
   quiet: { bg: "rgba(158, 158, 158, 0.25)", fg: "#eaebee" },
+  red: { bg: "#db4437", fg: "#ffffff" },
 };
 
 const EMPTY = ["unknown", "unavailable", "none", "None", ""];
@@ -327,8 +328,11 @@ class StatusStripCard extends HTMLElement {
         if (this._debug && (v === null || v === "0")) v = c.value === "countdown" || c.value === "elapsed" ? "1h 0m" : "1";
         if (v === null) continue;
         if (c.hide_zero && (v === "0" || Number(v) === 0)) continue;
-        const cc = c.colour ? `--c:${esc(c.colour)}` : "";
-        const cls = c.colour ? "chip tinted" : "chip grey";
+        // `fill`: a solid chip in one of the lead-chip colours (e.g. red for an alarm);
+        // `colour`: a tinted chip in any colour.
+        const solid = c.fill && COLOURS[c.fill];
+        const cc = solid ? `background:${solid.bg};color:${solid.fg}` : c.colour ? `--c:${esc(c.colour)}` : "";
+        const cls = solid ? "chip" : c.colour ? "chip tinted" : "chip grey";
         const cg = c.emoji ? `<span class="emoji">${esc(c.emoji)}</span>` : c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : "";
         chips.push(`<div class="${cls}" style="${cc}">${cg}<span>${esc(v)}</span></div>`);
       }
