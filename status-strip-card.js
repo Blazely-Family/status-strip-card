@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.9.0";
+const VERSION = "0.10.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -70,6 +70,12 @@ function chipValue(hass, chip) {
   const st = hass.states[chip.entity];
   if (!st) return null;
   const raw = chip.attribute ? st.attributes[chip.attribute] : st.state;
+  // `text`: a fixed label shown only while the value is true (e.g. "UPS" while
+  // a helper's ups_on_battery is true), so helpers send facts, not wording.
+  if (chip.text !== undefined) {
+    const on = raw === true || (typeof raw === "number" ? raw > 0 : ["on", "true", "yes"].includes(String(raw).toLowerCase()) || Number(raw) > 0);
+    return on ? String(chip.text) : null;
+  }
   if (raw === undefined || raw === null || EMPTY.includes(String(raw))) return null;
   const mode = chip.value || "state";
   if (mode === "countdown" || mode === "elapsed") {
