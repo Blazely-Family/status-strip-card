@@ -114,6 +114,10 @@ tap:
     noun: device
 ```
 
+Every tappable pill carries `data-popup-anchor`, so list-popup hangs the pop-up
+from the pill that opened it (lined up with its left edge, kept inside the
+strip) and leaves that pill lit through the dimmed backdrop.
+
 Styling uses HA theme variables; override with `--status-strip-pill-background`,
 `--status-strip-pill-border`, `--status-strip-pill-radius`,
 `--status-strip-pill-shadow` and `--status-strip-pill-backdrop`.
