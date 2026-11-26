@@ -94,7 +94,7 @@ draft into the shared block.
 | `icon`, `label` | Lead chip icon and optional text. |
 | `colour` | Lead chip colour: `yellow`, `green`, `blue`, `grey`, `quiet` (default). |
 | `icon_colour`, `glow` | Icon colour on a quiet chip; `glow: true` adds a soft glow. |
-| `chips` | Value chips: `{ entity, attribute?, value: state | countdown | elapsed, icon?, colour?, unit?, round?, hide_zero?, text? }`. `countdown`/`elapsed` read a timestamp. `text` is a fixed label shown only while the value is true (on, true, or above 0). |\| countdown \| elapsed, icon?, colour?, unit?, round?, hide_zero? }`. `countdown`/`elapsed` read a timestamp. |
+| `chips` | Value chips: `{ entity, attribute?, value: state | countdown | elapsed, icon?, colour?, unit?, round?, hide_zero?, text? }`. `countdown`/`elapsed` read a timestamp. `text` is a fixed label shown only while the value is true (on, true, or above 0). |
 | `tap` | Entity to open in more-info, a `/path` to navigate to, `false`, or a standard HA action object (e.g. `fire-dom-event` for a Browser Mod pop-up). Defaults to the `show` entity. |
 
 ### Opening a list pop-up
