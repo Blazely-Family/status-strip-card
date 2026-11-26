@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.13.0";
+const VERSION = "0.13.1";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -348,7 +348,8 @@ class StatusStripCard extends HTMLElement {
       const tap =
         p.tap === false ? "" : typeof p.tap === "object" ? `json:${JSON.stringify(p.tap)}` : p.tap || (p.show && p.show.entity) || "";
       const tapAttr = tap ? ` data-tap="${esc(tap)}"` : "";
-      return `<div class="pill${tap ? " tap" : ""}"${tapAttr}>${lead}${chips.join("")}</div>`;
+      // A tappable pill is a pop-up anchor: a list-popup it opens hangs from it.
+      return `<div class="pill${tap ? " tap" : ""}"${tapAttr}${tap ? " data-popup-anchor" : ""}>${lead}${chips.join("")}</div>`;
     } catch (e) {
       return "";
     }
