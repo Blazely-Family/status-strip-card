@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.7.1";
+const VERSION = "0.8.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -141,16 +141,9 @@ class StatusStripCard extends HTMLElement {
   _openPopup(cfg) {
     if (this._popup) this._popup.close();
     const popup = document.createElement("status-strip-popup");
-    popup.setup(
-      cfg,
-      (entityId) => {
-        popup.close();
-        this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
-      },
-      () => {
-        if (this._popup === popup) this._popup = null;
-      }
-    );
+    popup.setup(cfg, () => {
+      if (this._popup === popup) this._popup = null;
+    });
     this._popup = popup;
     document.body.appendChild(popup);
     popup.update(this._hass);
@@ -447,14 +440,12 @@ ha-icon.hum { color: #4aa3ff; }
 
 // A list pop-up for a pill. It only draws a list that a Home Assistant helper
 // provides: `entity`'s `attribute` (default `items`) is a list of
-// { entity_id, name, secondary?, icon? }. Tapping a row opens HA's own
-// more-info for its entity_id. Keys: entity, attribute, title, icon, colour,
+// { name, secondary?, since?, entity_id?, icon? }. Rows are display only. Keys: entity, attribute, title, icon, colour,
 // noun (e.g. "device", for "1 device" in the header), since (default true:
 // show when each row's entity last changed), empty (text for an empty list).
 class StatusStripPopup extends HTMLElement {
-  setup(cfg, onPick, onClose) {
+  setup(cfg, onClose) {
     this._cfg = cfg || {};
-    this._onPick = onPick;
     this._onClose = onClose;
     this._sig = null;
     this.attachShadow({ mode: "open" });
@@ -482,13 +473,16 @@ class StatusStripPopup extends HTMLElement {
         items = [];
       }
     }
-    return Array.isArray(items) ? items.filter((i) => i && i.entity_id) : [];
+    return Array.isArray(items) ? items.filter((i) => i && (i.name || i.entity_id)) : [];
   }
 
-  _since(hass, entityId) {
-    const st = hass.states[entityId];
-    if (!st || !st.last_changed) return "";
-    const d = new Date(st.last_changed);
+  // The item's own `since` (a timestamp the helper chose), else when its entity last changed.
+  _since(hass, item) {
+    const st = item.entity_id && hass.states[item.entity_id];
+    const ts = item.since || (st && st.last_changed);
+    if (!ts) return "";
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return "";
     const lang = (hass.locale && hass.locale.language) || undefined;
     const today = new Date().toDateString() === d.toDateString();
     const when = today
@@ -509,8 +503,8 @@ class StatusStripPopup extends HTMLElement {
       .map((i) => {
         const st = hass.states[i.entity_id];
         const ri = i.icon || (st && st.attributes.icon) || icon;
-        const since = c.since === false ? "" : `<div class="since">${this._since(hass, i.entity_id)}</div>`;
-        return `<div class="row" data-entity="${esc(i.entity_id)}" style="--c:${colour.bg}">
+        const since = c.since === false ? "" : `<div class="since">${this._since(hass, i)}</div>`;
+        return `<div class="row" style="--c:${colour.bg}">
           <div class="icon"><ha-icon icon="${esc(ri)}"></ha-icon></div>
           <div class="txt"><div class="name">${esc(i.name || (st && st.attributes.friendly_name) || i.entity_id)}</div>${
             i.secondary ? `<div class="sec">${esc(i.secondary)}</div>` : ""
@@ -533,12 +527,6 @@ class StatusStripPopup extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>${POPUP_STYLE}</style>${html}`;
     this.shadowRoot.querySelector(".scrim").addEventListener("click", () => this.close());
     this.shadowRoot.querySelector(".close").addEventListener("click", () => this.close());
-    this.shadowRoot.querySelectorAll(".row").forEach((el) =>
-      el.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        if (this._onPick) this._onPick(el.dataset.entity);
-      })
-    );
   }
 }
 
@@ -551,7 +539,7 @@ const POPUP_STYLE = `
   width: min(520px, calc(100vw - 32px)); max-height: 70vh; display: flex; flex-direction: column;
   box-sizing: border-box; padding: 18px 0 10px; border-radius: 20px; overflow: hidden;
   color: var(--primary-text-color, #eaebee);
-  /* The same surface as HA's own dialogs (e.g. the more-info a row opens). */
+  /* The same surface as HA's own dialogs. */
   background: var(--status-strip-popup-background, var(--ha-dialog-surface-background, var(--mdc-theme-surface, #1c1d21)));
   border: 1px solid var(--status-strip-pill-border, var(--ha-card-border-color, var(--divider-color)));
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
@@ -567,8 +555,7 @@ ha-icon { display: flex; line-height: 0; }
 .close { cursor: pointer; color: var(--secondary-text-color, #a3a7b0); --mdc-icon-size: 22px; padding: 4px; }
 .divider { height: 1px; background: var(--divider-color, rgba(255, 255, 255, 0.08)); margin: 0 20px; }
 .list { overflow-y: auto; padding: 4px 0; }
-.row { display: flex; align-items: center; gap: 14px; padding: 12px; margin: 6px 8px; border-radius: 14px; cursor: pointer; }
-.row:hover, .row:active { background: rgba(255, 255, 255, 0.06); }
+.row { display: flex; align-items: center; gap: 14px; padding: 12px; margin: 6px 8px; border-radius: 14px; }
 .icon { flex: none; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px;
   background: color-mix(in srgb, var(--c) 30%, transparent); color: color-mix(in srgb, var(--c) 88%, white); --mdc-icon-size: 22px; }
 .txt { flex: 1 1 auto; min-width: 0; }

@@ -102,10 +102,10 @@ draft into the shared block.
 
 A pill's `popup` draws a list that a Home Assistant helper provides; the card
 adds no logic of its own. `entity`'s `attribute` (default `items`) must be a
-list of `{ entity_id, name, secondary?, icon? }`. Each item is one row: the
-name, the secondary line under it, and (unless `since: false`) when that
-entity last changed. Tapping a row opens HA's own more-info dialog for its
-`entity_id`. `title`, `icon` and `colour` default to the pill's `label`,
+list of `{ name, secondary?, since?, entity_id?, icon? }`. Each item is one
+row: the name, the secondary line under it, and (unless `since: false`) the
+item's `since` timestamp, or failing that when its `entity_id` last changed.
+Rows are display only. `title`, `icon` and `colour` default to the pill's `label`,
 `icon` and `colour`; `noun: device` makes the header read "1 device".
 The pop-up uses the theme's `--ha-dialog-surface-background`; override it with
 `--status-strip-popup-background` and `--status-strip-popup-backdrop`.
