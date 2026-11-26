@@ -9,7 +9,7 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.11.0";
+const VERSION = "0.12.0";
 
 const COLOURS = {
   yellow: { bg: "#ffc107", fg: "#1c1d21" },
@@ -83,12 +83,13 @@ function chipValue(hass, chip) {
     const t = new Date(raw).getTime();
     if (Number.isNaN(t)) return null;
     const mins = mode === "countdown" ? (t - Date.now()) / 60000 : (Date.now() - t) / 60000;
-    return duration(mins);
+    return (chip.prefix ?? "") + duration(mins);
   }
+  // `prefix` / `unit` wrap the value, e.g. "UPS " + 14 + " min".
   if (chip.round !== undefined && !Number.isNaN(Number(raw))) {
-    return Number(raw).toFixed(chip.round) + (chip.unit ?? "");
+    return (chip.prefix ?? "") + Number(raw).toFixed(chip.round) + (chip.unit ?? "");
   }
-  return String(raw) + (chip.unit ?? "");
+  return (chip.prefix ?? "") + String(raw) + (chip.unit ?? "");
 }
 
 // Rooms as a list: { key, name, users, temperature, humidity, pills, left, right }.
