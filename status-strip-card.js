@@ -9,10 +9,10 @@
  * See README.md for the config reference.
  */
 
-const VERSION = "0.13.2";
+const VERSION = "0.13.3";
 
 const COLOURS = {
-  yellow: { bg: "#ffc107", fg: "#1c1d21" },
+  yellow: { bg: "#ffb300", fg: "#1c1d21" },   // sunflower, matching the theme's active colour
   green: { bg: "#43a047", fg: "#f1f8f1" },
   blue: { bg: "#3a7ca5", fg: "#f2f8fc" },
   grey: { bg: "rgba(158, 158, 158, 0.35)", fg: "#eaebee" },
